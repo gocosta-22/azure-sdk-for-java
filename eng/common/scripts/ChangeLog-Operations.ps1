@@ -4,6 +4,7 @@
 
 $RELEASE_TITLE_REGEX = "(?<releaseNoteTitle>^\#+.*(?<version>\b\d+\.\d+\.\d+([^0-9\s][^\s:]+)?)(\s(?<releaseStatus>\(Unreleased\)|\(\d{4}-\d{2}-\d{2}\)))?)"
 $UNRELEASED_TAG = "(Unreleased)"
+$DATE_FORMAT = "yyyy-MM-dd"
 
 # Returns a Collection of changeLogEntry object containing changelog info for all version present in the gived CHANGELOG
 function Get-ChangeLogEntries {
@@ -128,23 +129,38 @@ function New-ChangeLogEntry {
     [String]$Version,
     [String]$Status=$UNRELEASED_TAG,
     [String]$Title,
-    [String[]]$Content
+    [String[]]$Content,
+    [String]$IgnoreInvalids=$True
   )
 
-  # Validate relase Status
+  # Validate RelaseStatus
   $Status = $Status.Trim().Trim("()")
   if ($Status -ne "Unreleased") {
-    $dateFormat = "yyyy-MM-dd"
-    $provider = [System.Globalization.CultureInfo]::InvariantCulture
     try {
-      $Status = ([System.DateTime]::ParseExact($Status, $dateFormat, $provider)).ToString($dateFormat)
+      $Status = ([DateTime]$Status).ToString($DATE_FORMAT)
     }
     catch {
-        LogWarning "Invalid date [ $Status ] passed as status for Version [$Version]. Please use a valid date in the format '$dateFormat' or use '$UNRELEASED_TAG'"
+        LogWarning "Invalid date [ $Status ] passed as status for Version [$Version]. Please use a valid date in the format '$DATE_FORMAT' or use '$UNRELEASED_TAG'"
+        if (!$IgnoreInvalids) { exit 1 }
     }
   }
-
   $Status = "($Status)"
+
+  # Validate Version
+  try {
+    if ($Language -eq "python") {
+      $Version = ([AzureEngSemanticVersion]::ParsePythonVersionString($Version))).ToString()
+    }
+    else {
+      $Version = ([AzureEngSemanticVersion]::ParseVersionString($Version)).ToString()
+    }
+  }
+  catch {
+    LogWarning "Invalid version [ $Version ]."
+    if (!$IgnoreInvalids) { exit 1 }
+  }
+
+
   if (!$Content) { $Content = @() }
   if (!$Title) { $Title = "## $Version $Status" }
 
